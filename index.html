@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Конвертер событий (Parser)</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #bcad8c;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 20px; color: #dda21f; }
+        .panels {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 500px;
+            background: #2a2a2a;
+            color: #bcad8c;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            resize: vertical;
+            line-height: 1.5;
+        }
+        textarea:focus { outline: none; border-color: #dda21f; }
+        .controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        button {
+            background: #dda21f;
+            color: #1a1a1a;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        button:hover { background: #ffb84d; }
+        button.secondary { background: #444; color: #bcad8c; }
+        button.secondary:hover { background: #555; }
+        label { display: block; margin-bottom: 5px; color: #dda21f; font-size: 14px; }
+        .debug {
+            margin-top: 20px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .debug h3 { margin-bottom: 10px; color: #dda21f; font-size: 14px; }
+        .debug pre {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 11px;
+            max-height: 500px;
+            overflow: auto;
+            color: #888;
+        }
+        .debug-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .debug-tab {
+            padding: 8px 16px;
+            background: #444;
+            border: none;
+            border-radius: 4px;
+            color: #bcad8c;
+            cursor: pointer;
+        }
+        .debug-tab.active {
+            background: #dda21f;
+            color: #1a1a1a;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🎮 Конвертер событий (Parser)</h1>
+    <div class="panels">
+        <div>
+            <label>Входные данные</label>
+            <textarea id="input" placeholder="Вставьте строку события..."></textarea>
+        </div>
+        <div>
+            <label>Результат</label>
+            <textarea id="output" placeholder="Здесь появится викитекст..." readonly></textarea>
+        </div>
+    </div>
+    <div class="controls">
+        <button onclick="convert()">🔄 Преобразовать</button>
+        <button class="secondary" onclick="copyOutput()">📋 Копировать</button>
+        <button class="secondary" onclick="clearAll()">🗑️ Очистить</button>
+        <button class="secondary" onclick="loadExample()">📝 Пример</button>
+        <button class="secondary" onclick="toggleDebug()">🐛 Отладка</button>
+    </div>
+    <div class="debug" id="debugPanel" style="display:none;">
+        <div class="debug-tabs">
+            <button class="debug-tab active" onclick="showDebug('raw')">1. Raw</button>
+            <button class="debug-tab" onclick="showDebug('processed')">2. Processed</button>
+        </div>
+        <h3 id="debugTitle">Raw Tokens</h3>
+        <pre id="debugOutput"></pre>
+    </div>
+</div>
+
+<script>
+    const TOKEN = {
+        TEXT: 'text',
+        IMAGE: 'image',
+        SPEECH: 'speech',
+        VARIABLE: 'variable',
+        CYCLER: 'cycler',
+        BREAK: 'break',
+        PARAGRAPH: 'paragraph'
+    };
+
+    function tokenize(text) {
+        const tokens = [];
+        let pos = 0;
+
+        while (pos < text.length) {
+            const imgMatch = text.slice(pos).match(/^\[img\]gfx\/ui\/events\/([^[\]]+)\[\/img\]/);
+            if (imgMatch) {
+                tokens.push({ type: TOKEN.IMAGE, filename: imgMatch[1].split('/').pop() });
+                pos += imgMatch[0].length;
+                continue;
+            }
+
+            const speechMatch = text.slice(pos).match(/^%SPEECH_ON%([\s\S]*?)%SPEECH_OFF%/);
+            if (speechMatch) {
+                tokens.push({ type: TOKEN.SPEECH, content: tokenize(speechMatch[1]) });
+                pos += speechMatch[0].length;
+                continue;
+            }
+
+            const varMatch = text.slice(pos).match(/^%(?!SPEECH_)([a-zA-Z0-9_]+)%/);
+            if (varMatch) {
+                tokens.push({ type: TOKEN.VARIABLE, name: varMatch[1] });
+                pos += varMatch[0].length;
+                continue;
+            }
+
+            if (text[pos] === '{') {
+                const cyclerResult = parseCycler(text, pos);
+                if (cyclerResult) {
+                    tokens.push(cyclerResult.token);
+                    pos = cyclerResult.endPos;
+                    continue;
+                }
+            }
+
+            if (text.slice(pos, pos + 2) === "\\'") {
+                tokens.push({ type: TOKEN.TEXT, content: "'" });
+                pos += 2;
+                continue;
+            }
+
+            if (text.slice(pos, pos + 2) === '\\n') {
+                if (text.slice(pos, pos + 4) === '\\n\\n') {
+                    tokens.push({ type: TOKEN.BREAK });
+                    pos += 4;
+                    continue;
+                }
+                tokens.push({ type: TOKEN.TEXT, content: '\n' });
+                pos += 2;
+                continue;
+            }
+
+            const nextTokenMatch = text.slice(pos).match(/(\[img\]|%SPEECH_ON%|%(?!SPEECH_)[a-zA-Z0-9_]+%|\{.*? \| |\n|\\)/);
+            if (nextTokenMatch && nextTokenMatch.index > 0) {
+                tokens.push({ type: TOKEN.TEXT, content: text.slice(pos, pos + nextTokenMatch.index) });
+                pos += nextTokenMatch.index;
+                continue;
+            }
+
+            if (pos < text.length) {
+                tokens.push({ type: TOKEN.TEXT, content: text.slice(pos) });
+                pos = text.length;
+            }
+        }
+
+        return tokens;
+    }
+
+    function parseCycler(text, startPos) {
+        if (text[startPos] !== '{') return null;
+
+        let depth = 1;
+        let pos = startPos + 1;
+        let content = '';
+
+        while (pos < text.length && depth > 0) {
+            if (text[pos] === '{') {
+                depth++;
+                content += text[pos];
+                pos++;
+            } else if (text[pos] === '}') {
+                depth--;
+                if (depth > 0) content += text[pos];
+                pos++;
+            } else {
+                content += text[pos];
+                pos++;
+            }
+        }
+
+        if (depth !== 0) return null;
+
+        const rawOptions = content.split(/ \| /).map(opt => opt.trim());
+
+        return {
+            token: {
+                type: TOKEN.CYCLER,
+                options: rawOptions.map(opt => ({ raw: opt, tokens: tokenize(opt) }))
+            },
+            endPos: pos
+        };
+    }
+
+    function processTokens(tokens, context = 'top') {
+        const processed = [];
+
+        // Защита от бесконечной рекурсии
+        if (context === 'paragraph') {
+            for (const token of tokens) {
+                if (token.type === TOKEN.SPEECH) {
+                    processed.push({
+                        type: TOKEN.SPEECH,
+                        content: processTokens(token.content, 'speech')
+                    });
+                } else if (token.type === TOKEN.CYCLER) {
+                    processed.push({
+                        type: TOKEN.CYCLER,
+                        options: token.options.map(opt => ({
+                            raw: opt.raw,
+                            tokens: processTokens(opt.tokens, 'cycler')
+                        }))
+                    });
+                } else {
+                    processed.push({ ...token });
+                }
+            }
+            return processed;
+        }
+
+        const isInsideTemplate = context !== 'top';
+
+        if (isInsideTemplate) {
+            const groups = [];
+            let currentGroup = [];
+
+            for (const token of tokens) {
+                if (token.type === TOKEN.BREAK) {
+                    if (currentGroup.length > 0) {
+                        groups.push({ type: 'text', tokens: currentGroup });
+                        currentGroup = [];
+                    }
+                } else if (token.type === TOKEN.SPEECH) {
+                    if (currentGroup.length > 0) {
+                        groups.push({ type: 'text', tokens: currentGroup });
+                        currentGroup = [];
+                    }
+                    groups.push({ type: 'speech', token: token });
+                } else {
+                    currentGroup.push(token);
+                }
+            }
+            if (currentGroup.length > 0) {
+                groups.push({ type: 'text', tokens: currentGroup });
+            }
+
+            groups.forEach((group, index) => {
+                const isFirst = index === 0;
+                const isLast = index === groups.length - 1;
+                // ИСПРАВЛЕНО: needsBreak только у второго параграфа (index === 1)
+                const needsBreak = index === 1;
+
+                if (group.type === 'speech') {
+                    processed.push({
+                        type: TOKEN.PARAGRAPH,
+                        tokens: [{
+                            type: TOKEN.SPEECH,
+                            content: processTokens(group.token.content, 'speech')
+                        }],
+                        isFirst,
+                        isLast,
+                        hasBlockElement: true,
+                        needsPWrapper: false,
+                        needsBreak
+                    });
+                } else {
+                    processed.push({
+                        type: TOKEN.PARAGRAPH,
+                        tokens: processTokens(group.tokens, 'paragraph'),
+                        isFirst,
+                        isLast,
+                        hasBlockElement: false,
+                        needsPWrapper: !isFirst,
+                        needsBreak
+                    });
+                }
+            });
+        } else {
+            for (const token of tokens) {
+                if (token.type === TOKEN.SPEECH) {
+                    processed.push({ type: TOKEN.BREAK });
+                    processed.push({
+                        type: TOKEN.SPEECH,
+                        content: processTokens(token.content, 'speech')
+                    });
+                    processed.push({ type: TOKEN.BREAK });
+                } else if (token.type === TOKEN.CYCLER) {
+                    processed.push({
+                        type: TOKEN.CYCLER,
+                        options: token.options.map(opt => ({
+                            raw: opt.raw,
+                            tokens: processTokens(opt.tokens, 'cycler')
+                        }))
+                    });
+                } else if (token.type === TOKEN.BREAK) {
+                    processed.push({ type: TOKEN.BREAK });
+                } else {
+                    processed.push({ ...token });
+                }
+            }
+        }
+
+        return processed;
+    }
+
+    function transformToWikitext(tokens) {
+        return tokens.map(token => {
+            switch (token.type) {
+                case TOKEN.IMAGE:
+                    return `[[File:${token.filename}|left]]\n`;
+
+                case TOKEN.SPEECH:
+                    const speechContent = transformToWikitext(token.content).join('');
+                    return `{{EventSpeech|${speechContent}}}`;
+
+                case TOKEN.VARIABLE:
+                    const varName = token.name.charAt(0).toUpperCase() + token.name.slice(1);
+                    return `{{EventVariable|${varName}}}`;
+
+                case TOKEN.CYCLER:
+                    const processedOptions = token.options.map((opt, i) => {
+                        const optContent = transformToWikitext(opt.tokens).join('');
+                        return `|${i+1}=${optContent}`;
+                    });
+                    return `{{EventCycler${processedOptions.join('')}}}`;
+
+                case TOKEN.BREAK:
+                    return '\n\n';
+
+                case TOKEN.PARAGRAPH:
+                    const paraContent = transformToWikitext(token.tokens).join('');
+                    if (token.needsPWrapper) {
+                        const breakTag = token.needsBreak ? '{{EventBreak}}' : '';
+                        return breakTag + '<p>' + paraContent + '</p>';
+                    } else if (token.hasBlockElement) {
+                        const breakTag = token.needsBreak ? '{{EventBreak}}' : '';
+                        return breakTag + paraContent;
+                    } else {
+                        return paraContent;
+                    }
+
+                case TOKEN.TEXT:
+                default:
+                    return token.content;
+            }
+        }).filter(s => s !== '');
+    }
+
+    function cleanAstForDisplay(tokens) {
+        return tokens.map(token => {
+            if (token.type === TOKEN.TEXT && token.content && token.content.trim() === '') {
+                return null;
+            }
+
+            const clean = { type: token.type };
+
+            if (token.type === TOKEN.TEXT) {
+                clean.content = token.content.replace(/\n/g, '\\n');
+            } else if (token.type === TOKEN.IMAGE) {
+                clean.filename = token.filename;
+            } else if (token.type === TOKEN.VARIABLE) {
+                clean.name = token.name;
+            } else if (token.type === TOKEN.BREAK) {
+                clean.description = 'break';
+            } else if (token.type === TOKEN.SPEECH) {
+                clean.content = cleanAstForDisplay(token.content);
+            } else if (token.type === TOKEN.CYCLER) {
+                clean.options = token.options.map((opt, i) => ({
+                    index: i + 1,
+                    tokens: cleanAstForDisplay(opt.tokens)
+                }));
+            } else if (token.type === TOKEN.PARAGRAPH) {
+                clean.isFirst = token.isFirst;
+                clean.isLast = token.isLast;
+                clean.needsPWrapper = token.needsPWrapper;
+                clean.hasBlockElement = token.hasBlockElement;
+                clean.needsBreak = token.needsBreak;
+                clean.tokens = cleanAstForDisplay(token.tokens);
+            }
+
+            return clean;
+        }).filter(t => t !== null);
+    }
+
+    let globalRawTokens = [];
+    let globalProcessedTokens = [];
+    let currentDebugTab = 'raw';
+
+    function convert() {
+        let input = document.getElementById('input').value;
+
+        const quoteMatch = input.match(/"([\s\S]*?)"/);
+        if (quoteMatch) {
+            input = quoteMatch[1];
+        }
+
+        globalRawTokens = tokenize(input);
+        globalProcessedTokens = processTokens(globalRawTokens, 'top');
+
+        const wikitext = transformToWikitext(globalProcessedTokens).join('');
+
+        const cleaned = wikitext
+            .split('\n').map(line => line.trim()).join('\n')
+            .replace(/\n{3,}/g, '\n\n')
+            .replace(/^\n+|\n+$/g, '');
+
+        document.getElementById('output').value = cleaned;
+
+        if (document.getElementById('debugPanel').style.display !== 'none') {
+            updateDebug();
+        }
+    }
+
+    function showDebug(tab) {
+        currentDebugTab = tab;
+        document.querySelectorAll('.debug-tab').forEach(t => t.classList.remove('active'));
+        event.target.classList.add('active');
+        updateDebug();
+    }
+
+    function updateDebug() {
+        const title = document.getElementById('debugTitle');
+        const output = document.getElementById('debugOutput');
+
+        if (currentDebugTab === 'raw') {
+            title.textContent = '1. Raw Tokens';
+            output.textContent = JSON.stringify(cleanAstForDisplay(globalRawTokens), null, 2);
+        } else {
+            title.textContent = '2. Processed Tokens';
+            output.textContent = JSON.stringify(cleanAstForDisplay(globalProcessedTokens), null, 2);
+        }
+    }
+
+    function copyOutput() {
+        const output = document.getElementById('output');
+        output.select();
+        document.execCommand('copy');
+    }
+
+    function clearAll() {
+        document.getElementById('input').value = '';
+        document.getElementById('output').value = '';
+        document.getElementById('debugOutput').textContent = '';
+        globalRawTokens = [];
+        globalProcessedTokens = [];
+    }
+
+    function loadExample() {
+        document.getElementById('input').value = `Text = "[img]gfx/ui/events/event_25.png[/img] {%forestlover% looks up.%SPEECH_ON%I used to play here.%SPEECH_OFF%\\n\\nSecond paragraph.\\n\\nThird paragraph. | Option 2}",`;
+    }
+
+    function toggleDebug() {
+        const panel = document.getElementById('debugPanel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        if (panel.style.display === 'block') {
+            updateDebug();
+        }
+    }
+
+    document.getElementById('input').addEventListener('paste', function() {
+        setTimeout(convert, 100);
+    });
+</script>
+</body>
+</html>
