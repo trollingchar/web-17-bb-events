@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Конвертер событий (Parser)</title>
+    <title>Battle Brothers Event Converter</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -11,108 +11,183 @@
             background: #1a1a1a;
             color: #bcad8c;
             padding: 20px;
+            line-height: 1.6;
         }
-        .container { max-width: 1200px; margin: 0 auto; }
-        h1 { text-align: center; margin-bottom: 20px; color: #dda21f; }
-        .panels {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 10px; color: #dda21f; }
+        .subtitle { text-align: center; margin-bottom: 30px; color: #888; font-size: 14px; }
+
+        .main { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
         textarea {
-            width: 100%;
-            height: 500px;
-            background: #2a2a2a;
-            color: #bcad8c;
-            border: 1px solid #444;
-            border-radius: 4px;
-            padding: 10px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 13px;
-            resize: vertical;
-            line-height: 1.5;
+            width: 100%; height: 400px;
+            background: #2a2a2a; color: #bcad8c;
+            border: 1px solid #444; border-radius: 4px;
+            padding: 10px; font-family: 'Consolas', monospace;
+            font-size: 13px; resize: vertical; line-height: 1.5;
         }
         textarea:focus { outline: none; border-color: #dda21f; }
-        .controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+        .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 40px; }
         button {
-            background: #dda21f;
-            color: #1a1a1a;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 14px;
+            background: #dda21f; color: #1a1a1a;
+            border: none; padding: 12px 24px;
+            border-radius: 4px; cursor: pointer;
+            font-weight: bold; font-size: 14px;
             transition: all 0.2s;
         }
-        button:hover { background: #ffb84d; }
+        button:hover { background: #ffb84d; transform: translateY(-2px); }
         button.secondary { background: #444; color: #bcad8c; }
         button.secondary:hover { background: #555; }
-        label { display: block; margin-bottom: 5px; color: #dda21f; font-size: 14px; }
-        .debug {
-            margin-top: 20px;
-            background: #2a2a2a;
-            border-radius: 8px;
-            padding: 15px;
+
+        .instructions {
+            background: #2a2a2a; border-radius: 8px; padding: 20px;
+            margin-bottom: 20px; border: 1px solid #444;
         }
-        .debug h3 { margin-bottom: 10px; color: #dda21f; font-size: 14px; }
-        .debug pre {
-            background: #1a1a1a;
-            border: 1px solid #444;
-            border-radius: 4px;
-            padding: 10px;
-            font-size: 11px;
-            max-height: 500px;
-            overflow: auto;
-            color: #888;
+        .instructions h2 { color: #dda21f; margin-bottom: 15px; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        .instructions h3 { color: #dda21f; margin: 20px 0 10px 0; }
+        .instructions ul { margin-left: 20px; margin-bottom: 15px; }
+        .instructions li { margin-bottom: 5px; }
+        .instructions code {
+            background: #1a1a1a; padding: 2px 6px;
+            border-radius: 3px; font-family: 'Consolas', monospace;
+            color: #fff;
         }
-        .debug-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
+        .instructions a { color: #dda21f; text-decoration: none; }
+        .instructions a:hover { text-decoration: underline; }
+
+        .syntax {
+            background: #1a1a1a; border-radius: 4px;
+            padding: 15px; font-family: 'Consolas', monospace;
+            font-size: 12px; overflow-x: auto;
+            border: 1px solid #444; margin: 10px 0;
+            white-space: pre;
         }
-        .debug-tab {
-            padding: 8px 16px;
-            background: #444;
-            border: none;
-            border-radius: 4px;
-            color: #bcad8c;
-            cursor: pointer;
-        }
-        .debug-tab.active {
-            background: #dda21f;
-            color: #1a1a1a;
+
+        label { display: block; margin-bottom: 5px; color: #dda21f; font-size: 14px; font-weight: bold; }
+
+        @media (max-width: 1000px) {
+            .main { grid-template-columns: 1fr; }
+            textarea { height: 300px; }
         }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>🎮 Конвертер событий (Parser)</h1>
-    <div class="panels">
+    <h1>🎮 Battle Brothers Event Converter</h1>
+    <p class="subtitle">Convert game event code → Fandom Wiki wikitext</p>
+
+    <div class="main">
         <div>
-            <label>Входные данные</label>
-            <textarea id="input" placeholder="Вставьте строку события..."></textarea>
+            <label>📥 Game Code (paste Text = "..." here)</label>
+            <textarea id="input" placeholder='Example: Text = "[img]gfx/ui/events/event_25.png[/img] {%forestlover% looks up.%SPEECH_ON%I used to play here.%SPEECH_OFF% | Option 2}",'></textarea>
         </div>
         <div>
-            <label>Результат</label>
-            <textarea id="output" placeholder="Здесь появится викитекст..." readonly></textarea>
+            <label>📤 Wiki Output (click Copy)</label>
+            <textarea id="output" readonly placeholder="Converted wikitext will appear here..."></textarea>
         </div>
     </div>
+
     <div class="controls">
-        <button onclick="convert()">🔄 Преобразовать</button>
-        <button class="secondary" onclick="copyOutput()">📋 Копировать</button>
-        <button class="secondary" onclick="clearAll()">🗑️ Очистить</button>
-        <button class="secondary" onclick="loadExample()">📝 Пример</button>
-        <button class="secondary" onclick="toggleDebug()">🐛 Отладка</button>
+        <button onclick="convert()">🔄 Convert</button>
+        <button class="secondary" onclick="copyOutput()">📋 Copy Result</button>
     </div>
-    <div class="debug" id="debugPanel" style="display:none;">
-        <div class="debug-tabs">
-            <button class="debug-tab active" onclick="showDebug('raw')">1. Raw</button>
-            <button class="debug-tab" onclick="showDebug('processed')">2. Processed</button>
-        </div>
-        <h3 id="debugTitle">Raw Tokens</h3>
-        <pre id="debugOutput"></pre>
+
+    <div class="instructions">
+        <h2>📚 Instructions for Contributors</h2>
+
+        <h3>🔧 Getting Started</h3>
+        <ul>
+            <li>Decompile the game code first. See guide: <a href="https://battlebrothers.fandom.com/wiki/Mods_and_Modding" target="_blank">Mods and Modding</a></li>
+            <li>Event files are in <code>scripts/events/events/</code> (also check DLC folders)</li>
+            <li>Each event state = one Tabber tab. Find them in <code>this.m.Screens.push({...})</code></li>
+        </ul>
+
+        <h3>📝 Converting Event Screens</h3>
+        <ul>
+            <li><strong>ID = "A"</strong> → Use as Tabber tab name (<code>|-|A=</code>)</li>
+            <li><strong>Text = "..."</strong> → Paste into left panel. Converter handles messy code; just avoid capturing extra quotes</li>
+            <li><strong>Options = [...]</strong> → Button actions:
+                <ul>
+                    <li><code>return "B"</code> → Link to tab B</li>
+                    <li><code>return 0</code> → Event ends (no link)</li>
+                    <li>Add requirements/side effects to button text</li>
+                </ul>
+            </li>
+            <li><strong>function start</strong> → Character tokens (<code>this.Characters.push</code>) and effects happening when the screen is shown. There are bugs sometimes, add them to "Other notes" section</li>
+            <li><strong>function onUpdateScore</strong> → Event conditions and variable setup. Cross-check with wiki (it's sometimes incorrect or outdated)</li>
+        </ul>
+
+        <h3>✍️ Formatting Guidelines</h3>
+        <ul>
+            <li>Use <code>{{EventVariable|Name}}</code> for character names (Spiderbro, Randombrother), edit something that makes no sense (Noncom) and trim full names when there are also short ones (Monkfull → Monk)</li>
+            <li>Remove backslashes: <code>\'</code> → <code>'</code>, <code>\\n</code> → line breaks, parser can do it</li>
+            <li>Put explanations inside <code>{{Tooltip|term|explanation}}</code>, provide details whereever possible</li>
+            <li>Use Title Case for game terms, include <code>+</code> signs where present (Bro gains +2-4 Max Fatigue)</li>
+            <li>For random injuries: use icon for most severe possible outcome</li>
+            <li>Round mood effects UP for icons: <code>effect_mood_X.png</code> where X = mood name</li>
+            <li>Use <code>{{EventVariable}}</code> in buttons too, not just description text</li>
+        </ul>
+
+        <h3>⚠️ Pay attention</h3>
+        <ul>
+            <li>Game files contain typos! Check for extra brackets, single-option <code>{}</code> blocks</li>
+            <li>Converter works without quotes too (pastes everything) — useful for raw snippets</li>
+            <li>Image sizes vary: <code>asset_moral_reputation.png</code> isn't square (specify both dimensions), <code>event_12.png</code> is oversized (add size parameter)</li>
+            <li>Censor offensive terms per <a href="https://community.fandom.com/wiki/Offensive_Terms_Policy" target="_blank">Fandom Policy</a></li>
+            <li>Format existing screenshots into galleries</li>
+            <li>Remove <code>__FORCETOC__</code> when editing event pages</li>
+        </ul>
+
+        <h3>📋 Wikitext Syntax Reference</h3>
+
+        <p><strong>Full Event Structure:</strong></p>
+        <div class="syntax">{{Event}}
+&lt;tabber&gt;
+|-|A=
+...content...
+
+|-|B=
+...content...
+
+&lt;/tabber&gt;
+{{EventEnd}}</div>
+
+        <p><strong>Event Screen (Tab):</strong></p>
+        <div class="syntax">|-|Name=
+{{EventTab|header=Title|left=Character1's token|right=Character2's token}}
+description text...
+{{EventButtons}}
+{{EventButton|...}}
+{{EventTabEnd}}</div>
+
+        <p><strong>With Effects Table:</strong></p>
+        <div class="syntax">|-|Name=
+{{EventTab|header=Title}}
+description...
+{{EventSeparator}}
+{| class="event-table" style="margin:auto; max-width:50%"
+|-
+| [[File:icon.png|x25px]] || Effect description
+|-
+| [[File:effect mood good spirit.png|x25px]] || {{EventVariable|Bro}} gets a {{Tooltip|good mood|+0.5 (Saw something funny)}}
+|}
+{{EventButtons}}
+{{EventButton|...}}
+{{EventTabEnd}}</div>
+
+        <p><strong>Button Syntax (alternating: text | link | linkText):</strong></p>
+        <div class="syntax">{{EventButton|I hope it was worth it. (the event ends)}}
+{{EventButton||#B|Get back to work!}}
+{{EventButton||#Monk|What do the old gods say, {{EventVariable|Monk}}?|{{Sp}}(requires Monk)}}
+{{EventButton|Let's free her. (|#Good|80% Good|,{{Sp}}|#Bad|20% Bad|)}}</div>
+
+        <p><em>Tip: Use <code>{{Sp}}</code> for explicit spaces where needed.</em></p>
+
+        <h3>🔗 Resources</h3>
+        <ul>
+            <li><a href="https://github.com/trollingchar/web-17-bb-events" target="_blank">GitHub Repository</a></li>
+            <li>Recent edits on wiki for working examples</li>
+        </ul>
     </div>
 </div>
 
@@ -449,13 +524,6 @@
         }
     }
 
-    function showDebug(tab) {
-        currentDebugTab = tab;
-        document.querySelectorAll('.debug-tab').forEach(t => t.classList.remove('active'));
-        event.target.classList.add('active');
-        updateDebug();
-    }
-
     function updateDebug() {
         const title = document.getElementById('debugTitle');
         const output = document.getElementById('debugOutput');
@@ -473,26 +541,6 @@
         const output = document.getElementById('output');
         output.select();
         document.execCommand('copy');
-    }
-
-    function clearAll() {
-        document.getElementById('input').value = '';
-        document.getElementById('output').value = '';
-        document.getElementById('debugOutput').textContent = '';
-        globalRawTokens = [];
-        globalProcessedTokens = [];
-    }
-
-    function loadExample() {
-        document.getElementById('input').value = `Text = "[img]gfx/ui/events/event_25.png[/img] {%forestlover% looks up.%SPEECH_ON%I used to play here.%SPEECH_OFF%\\n\\nSecond paragraph.\\n\\nThird paragraph. | Option 2}",`;
-    }
-
-    function toggleDebug() {
-        const panel = document.getElementById('debugPanel');
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-        if (panel.style.display === 'block') {
-            updateDebug();
-        }
     }
 
     document.getElementById('input').addEventListener('paste', function() {
